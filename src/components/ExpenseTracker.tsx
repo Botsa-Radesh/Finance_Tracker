@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,6 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 interface Expense {
   id: string;
@@ -16,11 +18,9 @@ interface Expense {
 }
 
 const ExpenseTracker = () => {
-  const [expenses, setExpenses] = useState<Expense[]>([
-    { id: '1', amount: 45.50, category: 'Food', description: 'Groceries', date: '2025-01-10' },
-    { id: '2', amount: 120.00, category: 'Transportation', description: 'Gas', date: '2025-01-09' },
-    { id: '3', amount: 85.25, category: 'Entertainment', description: 'Movie tickets', date: '2025-01-08' },
-  ]);
+  const { user } = useAuth();
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [newExpense, setNewExpense] = useState({
     amount: '',
@@ -40,34 +40,110 @@ const ExpenseTracker = () => {
     'Other'
   ];
 
-  const addExpense = () => {
+  useEffect(() => {
+    if (user) {
+      fetchExpenses();
+    }
+  }, [user]);
+
+  const fetchExpenses = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('expenses')
+        .select('*')
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+
+      const formattedExpenses = data.map(exp => ({
+        id: exp.id,
+        amount: Number(exp.amount),
+        category: exp.category,
+        description: exp.description || '',
+        date: exp.date,
+      }));
+
+      setExpenses(formattedExpenses);
+    } catch (error: any) {
+      toast.error("Failed to load expenses: " + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addExpense = async () => {
     if (!newExpense.amount || !newExpense.category || !newExpense.description) {
       toast.error("Please fill in all fields");
       return;
     }
 
-    const expense: Expense = {
-      id: Date.now().toString(),
-      amount: parseFloat(newExpense.amount),
-      category: newExpense.category,
-      description: newExpense.description,
-      date: newExpense.date
-    };
+    if (!user) {
+      toast.error("You must be logged in");
+      return;
+    }
 
-    setExpenses([expense, ...expenses]);
-    setNewExpense({
-      amount: '',
-      category: '',
-      description: '',
-      date: new Date().toISOString().split('T')[0]
-    });
-    toast.success("Expense added successfully!");
+    try {
+      const { data, error } = await supabase
+        .from('expenses')
+        .insert([{
+          user_id: user.id,
+          amount: parseFloat(newExpense.amount),
+          category: newExpense.category,
+          description: newExpense.description,
+          date: newExpense.date
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const newExp: Expense = {
+        id: data.id,
+        amount: Number(data.amount),
+        category: data.category,
+        description: data.description || '',
+        date: data.date,
+      };
+
+      setExpenses([newExp, ...expenses]);
+      setNewExpense({
+        amount: '',
+        category: '',
+        description: '',
+        date: new Date().toISOString().split('T')[0]
+      });
+      toast.success("Expense added successfully!");
+    } catch (error: any) {
+      toast.error("Failed to add expense: " + error.message);
+    }
   };
 
-  const deleteExpense = (id: string) => {
-    setExpenses(expenses.filter(e => e.id !== id));
-    toast.success("Expense deleted");
+  const deleteExpense = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('expenses')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setExpenses(expenses.filter(e => e.id !== id));
+      toast.success("Expense deleted");
+    } catch (error: any) {
+      toast.error("Failed to delete expense: " + error.message);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-2 text-sm text-muted-foreground">Loading expenses...</p>
+        </div>
+      </div>
+    );
+  }
 
   const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
 

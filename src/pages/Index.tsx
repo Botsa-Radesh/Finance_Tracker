@@ -1,15 +1,45 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Wallet, TrendingUp, PiggyBank, Shield, DollarSign, Calendar } from "lucide-react";
+import { Wallet, TrendingUp, PiggyBank, Shield, DollarSign, Calendar, LogOut } from "lucide-react";
 import ExpenseTracker from "@/components/ExpenseTracker";
 import BudgetManager from "@/components/BudgetManager";
 import SpendingChart from "@/components/SpendingChart";
 import Recommendations from "@/components/Recommendations";
 import FeasibilityChecker from "@/components/FeasibilityChecker";
+import { useAuth } from "@/hooks/useAuth";
 
 const Index = () => {
+  const navigate = useNavigate();
+  const { user, loading, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'expenses' | 'budget' | 'recommendations' | 'feasibility'>('dashboard');
+
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate("/auth");
+    }
+  }, [user, loading, navigate]);
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/auth");
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
 
   // Sample data - in a real app, this would come from a backend/state management
   const totalBalance = 12450.75;
@@ -33,7 +63,7 @@ const Index = () => {
                 <p className="text-sm text-muted-foreground">Your Personal Finance Assistant</p>
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
               <Button 
                 variant={activeTab === 'dashboard' ? 'default' : 'ghost'}
                 onClick={() => setActiveTab('dashboard')}
@@ -63,6 +93,14 @@ const Index = () => {
                 onClick={() => setActiveTab('feasibility')}
               >
                 Feasibility
+              </Button>
+              <Button 
+                variant="ghost"
+                size="icon"
+                onClick={handleSignOut}
+                title="Sign out"
+              >
+                <LogOut className="h-4 w-4" />
               </Button>
             </div>
           </div>

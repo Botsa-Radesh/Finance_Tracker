@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,6 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Plus, TrendingDown, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 interface Budget {
   id: string;
@@ -15,35 +17,95 @@ interface Budget {
 }
 
 const BudgetManager = () => {
-  const [budgets, setBudgets] = useState<Budget[]>([
-    { id: '1', category: 'Food', limit: 500, spent: 345 },
-    { id: '2', category: 'Transportation', limit: 300, spent: 220 },
-    { id: '3', category: 'Entertainment', limit: 200, spent: 185 },
-    { id: '4', category: 'Shopping', limit: 400, spent: 150 },
-  ]);
+  const { user } = useAuth();
+  const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [newBudget, setNewBudget] = useState({
     category: '',
     limit: ''
   });
 
-  const addBudget = () => {
+  useEffect(() => {
+    if (user) {
+      fetchBudgets();
+    }
+  }, [user]);
+
+  const fetchBudgets = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('budgets')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const formattedBudgets = data.map(budget => ({
+        id: budget.id,
+        category: budget.category,
+        limit: Number(budget.limit_amount),
+        spent: Number(budget.spent),
+      }));
+
+      setBudgets(formattedBudgets);
+    } catch (error: any) {
+      toast.error("Failed to load budgets: " + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addBudget = async () => {
     if (!newBudget.category || !newBudget.limit) {
       toast.error("Please fill in all fields");
       return;
     }
 
-    const budget: Budget = {
-      id: Date.now().toString(),
-      category: newBudget.category,
-      limit: parseFloat(newBudget.limit),
-      spent: 0
-    };
+    if (!user) {
+      toast.error("You must be logged in");
+      return;
+    }
 
-    setBudgets([...budgets, budget]);
-    setNewBudget({ category: '', limit: '' });
-    toast.success("Budget created successfully!");
+    try {
+      const { data, error } = await supabase
+        .from('budgets')
+        .insert([{
+          user_id: user.id,
+          category: newBudget.category,
+          limit_amount: parseFloat(newBudget.limit),
+          spent: 0
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const newBudgetItem: Budget = {
+        id: data.id,
+        category: data.category,
+        limit: Number(data.limit_amount),
+        spent: Number(data.spent),
+      };
+
+      setBudgets([...budgets, newBudgetItem]);
+      setNewBudget({ category: '', limit: '' });
+      toast.success("Budget created successfully!");
+    } catch (error: any) {
+      toast.error("Failed to create budget: " + error.message);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-2 text-sm text-muted-foreground">Loading budgets...</p>
+        </div>
+      </div>
+    );
+  }
 
   const getPercentage = (spent: number, limit: number) => {
     return (spent / limit) * 100;
