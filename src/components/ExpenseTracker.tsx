@@ -83,11 +83,14 @@ const ExpenseTracker = () => {
     }
 
     try {
+      const expenseAmount = parseFloat(newExpense.amount);
+
+      // Insert the expense
       const { data, error } = await supabase
         .from('expenses')
         .insert([{
           user_id: user.id,
-          amount: parseFloat(newExpense.amount),
+          amount: expenseAmount,
           category: newExpense.category,
           description: newExpense.description,
           date: newExpense.date
@@ -96,6 +99,22 @@ const ExpenseTracker = () => {
         .single();
 
       if (error) throw error;
+
+      // Update the corresponding budget's spent amount
+      const { data: budget } = await supabase
+        .from('budgets')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('category', newExpense.category)
+        .maybeSingle();
+
+      if (budget) {
+        const newSpent = Number(budget.spent) + expenseAmount;
+        await supabase
+          .from('budgets')
+          .update({ spent: newSpent })
+          .eq('id', budget.id);
+      }
 
       const newExp: Expense = {
         id: data.id,
@@ -112,7 +131,7 @@ const ExpenseTracker = () => {
         description: '',
         date: new Date().toISOString().split('T')[0]
       });
-      toast.success("Expense added successfully!");
+      toast.success("Expense added and budget updated!");
     } catch (error: any) {
       toast.error("Failed to add expense: " + error.message);
     }
@@ -120,15 +139,37 @@ const ExpenseTracker = () => {
 
   const deleteExpense = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('expenses')
-        .delete()
-        .eq('id', id);
+      // Find the expense to get its amount and category
+      const expenseToDelete = expenses.find(e => e.id === id);
+      
+      if (expenseToDelete) {
+        // Delete the expense
+        const { error } = await supabase
+          .from('expenses')
+          .delete()
+          .eq('id', id);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      setExpenses(expenses.filter(e => e.id !== id));
-      toast.success("Expense deleted");
+        // Update the corresponding budget's spent amount
+        const { data: budget } = await supabase
+          .from('budgets')
+          .select('*')
+          .eq('user_id', user?.id)
+          .eq('category', expenseToDelete.category)
+          .maybeSingle();
+
+        if (budget) {
+          const newSpent = Math.max(0, Number(budget.spent) - expenseToDelete.amount);
+          await supabase
+            .from('budgets')
+            .update({ spent: newSpent })
+            .eq('id', budget.id);
+        }
+
+        setExpenses(expenses.filter(e => e.id !== id));
+        toast.success("Expense deleted and budget updated!");
+      }
     } catch (error: any) {
       toast.error("Failed to delete expense: " + error.message);
     }
