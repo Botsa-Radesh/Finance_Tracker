@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      bills: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string
+          due_day: number
+          frequency: string
+          id: string
+          is_active: boolean
+          last_paid_date: string | null
+          name: string
+          next_due_date: string
+          notes: string | null
+          reminder_days_before: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          category: string
+          created_at?: string
+          due_day: number
+          frequency: string
+          id?: string
+          is_active?: boolean
+          last_paid_date?: string | null
+          name: string
+          next_due_date: string
+          notes?: string | null
+          reminder_days_before?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string
+          due_day?: number
+          frequency?: string
+          id?: string
+          is_active?: boolean
+          last_paid_date?: string | null
+          name?: string
+          next_due_date?: string
+          notes?: string | null
+          reminder_days_before?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       budgets: {
         Row: {
           category: string
@@ -122,7 +173,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      calculate_next_due_date: {
+        Args: {
+          p_due_day: number
+          p_frequency: string
+          p_last_paid_date: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never
