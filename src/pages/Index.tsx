@@ -5,21 +5,66 @@ import { Button } from "@/components/ui/button";
 import { Wallet, TrendingUp, PiggyBank, Shield, DollarSign, Calendar, LogOut } from "lucide-react";
 import ExpenseTracker from "@/components/ExpenseTracker";
 import BudgetManager from "@/components/BudgetManager";
+import IncomeManager from "@/components/IncomeManager";
 import SpendingChart from "@/components/SpendingChart";
 import Recommendations from "@/components/Recommendations";
 import FeasibilityChecker from "@/components/FeasibilityChecker";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 
 const Index = () => {
   const navigate = useNavigate();
   const { user, loading, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'expenses' | 'budget' | 'recommendations' | 'feasibility'>('dashboard');
+  const [monthlyIncome, setMonthlyIncome] = useState(0);
+  const [totalExpenses, setTotalExpenses] = useState(0);
+  const [totalBudget, setTotalBudget] = useState(0);
+  const [dataLoading, setDataLoading] = useState(true);
 
   useEffect(() => {
     if (!loading && !user) {
       navigate("/auth");
     }
   }, [user, loading, navigate]);
+
+  useEffect(() => {
+    if (user) {
+      fetchDashboardData();
+    }
+  }, [user]);
+
+  const fetchDashboardData = async () => {
+    try {
+      // Fetch monthly income
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('monthly_income')
+        .eq('id', user?.id)
+        .single();
+
+      setMonthlyIncome(Number(profile?.monthly_income) || 0);
+
+      // Fetch total expenses
+      const { data: expenses } = await supabase
+        .from('expenses')
+        .select('amount');
+
+      const expenseTotal = expenses?.reduce((sum, exp) => sum + Number(exp.amount), 0) || 0;
+      setTotalExpenses(expenseTotal);
+
+      // Fetch total budget
+      const { data: budgets } = await supabase
+        .from('budgets')
+        .select('limit_amount');
+
+      const budgetTotal = budgets?.reduce((sum, budget) => sum + Number(budget.limit_amount), 0) || 0;
+      setTotalBudget(budgetTotal);
+    } catch (error: any) {
+      console.error("Failed to load dashboard data:", error);
+    } finally {
+      setDataLoading(false);
+    }
+  };
 
   const handleSignOut = async () => {
     await signOut();
@@ -41,12 +86,7 @@ const Index = () => {
     return null;
   }
 
-  // Sample data - in a real app, this would come from a backend/state management
-  const totalBalance = 12450.75;
-  const monthlyIncome = 5000;
-  const monthlyExpenses = 3250.40;
-  const savingsGoal = 10000;
-  const currentSavings = 8500;
+  const remainingBudget = monthlyIncome - totalExpenses;
 
   return (
     <div className="min-h-screen bg-gradient-hero">
@@ -110,56 +150,64 @@ const Index = () => {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         {activeTab === 'dashboard' && (
-          <div className="space-y-6">
+          <div className="space-y-8 animate-fade-in">
+            {/* Income Manager */}
+            <IncomeManager />
+
             {/* Hero Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Card className="shadow-card hover:shadow-elevated transition-shadow">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Balance</CardTitle>
-                  <DollarSign className="h-4 w-4 text-primary" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-foreground">₹{totalBalance.toLocaleString('en-IN')}</div>
-                  <p className="text-xs text-success mt-1">+12.5% from last month</p>
-                </CardContent>
-              </Card>
-
-              <Card className="shadow-card hover:shadow-elevated transition-shadow">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Card className="shadow-card hover-lift">
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium">Monthly Income</CardTitle>
-                  <TrendingUp className="h-4 w-4 text-success" />
+                  <TrendingUp className="w-4 h-4 text-success" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-foreground">₹{monthlyIncome.toLocaleString('en-IN')}</div>
-                  <p className="text-xs text-muted-foreground mt-1">This month</p>
+                  {dataLoading ? (
+                    <div className="animate-pulse h-8 bg-muted rounded"></div>
+                  ) : (
+                    <>
+                      <div className="text-2xl font-bold text-foreground">₹{monthlyIncome.toLocaleString('en-IN')}</div>
+                      <p className="text-xs text-muted-foreground mt-1">Set your income above</p>
+                    </>
+                  )}
                 </CardContent>
               </Card>
 
-              <Card className="shadow-card hover:shadow-elevated transition-shadow">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Monthly Expenses</CardTitle>
-                  <Calendar className="h-4 w-4 text-destructive" />
+              <Card className="shadow-card hover-lift">
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
+                  <DollarSign className="w-4 h-4 text-destructive" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-foreground">₹{monthlyExpenses.toLocaleString('en-IN')}</div>
-                  <p className="text-xs text-muted-foreground mt-1">This month</p>
+                  {dataLoading ? (
+                    <div className="animate-pulse h-8 bg-muted rounded"></div>
+                  ) : (
+                    <>
+                      <div className="text-2xl font-bold text-foreground">₹{totalExpenses.toLocaleString('en-IN')}</div>
+                      <p className="text-xs text-muted-foreground mt-1">All time expenses</p>
+                    </>
+                  )}
                 </CardContent>
               </Card>
 
-              <Card className="shadow-card hover:shadow-elevated transition-shadow">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Savings Progress</CardTitle>
-                  <PiggyBank className="h-4 w-4 text-accent" />
+              <Card className="shadow-card hover-lift">
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium">Remaining Budget</CardTitle>
+                  <PiggyBank className="w-4 h-4 text-accent" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-foreground">₹{currentSavings.toLocaleString('en-IN')}</div>
-                  <p className="text-xs text-muted-foreground mt-1">of ₹{savingsGoal.toLocaleString('en-IN')} goal</p>
-                  <div className="w-full bg-muted rounded-full h-2 mt-2">
-                    <div 
-                      className="bg-gradient-success h-2 rounded-full transition-all" 
-                      style={{ width: `${(currentSavings / savingsGoal) * 100}%` }}
-                    ></div>
-                  </div>
+                  {dataLoading ? (
+                    <div className="animate-pulse h-8 bg-muted rounded"></div>
+                  ) : (
+                    <>
+                      <div className={`text-2xl font-bold ${remainingBudget >= 0 ? 'text-success' : 'text-destructive'}`}>
+                        ₹{remainingBudget.toLocaleString('en-IN')}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {remainingBudget >= 0 ? 'Available to spend' : 'Over budget'}
+                      </p>
+                    </>
+                  )}
                 </CardContent>
               </Card>
             </div>
